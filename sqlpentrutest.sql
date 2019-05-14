@@ -341,6 +341,11 @@ from books
 select count(distinct (book_author))
 from books
 
+-- sa se afiseze cate review-uri are fiecare utilizator
+select A.user_id, user_name, count(A.review_id) as [Nr.Review-uri]
+from reviews as A inner join reviews as B on A.review_id = B.review_id inner join users as C on B.user_id = C.user_id
+group by A.user_id, user_name
+
 --sa se afiseze numele cartii, media ratingului pentru cele care au un rating
 
 select A.book_title, avg(rating_number) as [Medie]
@@ -356,4 +361,96 @@ having rating_number > (select avg(rating_number) as [media]
 						from bookRatings)
 
 
---
+--TABELE PIVOT--
+--sa se afiseze cate review-uri au fost postate in fiecare luna de fiecare utilizator
+
+--creez un view vNrReviews ca sa-mi fie mai simplu sa lucrez cu el in pivot
+
+create view vNrReviews
+as
+select A.user_id, user_name, count(A.review_id) as [Nr.Review-uri]
+from reviews as A inner join reviews as B on A.review_id = B.review_id inner join users as C on B.user_id = C.user_id
+group by A.user_id, user_name
+
+--fara pivot:
+
+select A.user_id,
+	book_id,
+	A.user_name, 
+	DATENAME(MONTH, published_date) as [Month],
+	review_desc,
+	[Nr.Review-uri]
+from users as A inner join reviews as B on A.user_id = B.user_id inner join vNrReviews as C on B.user_id = C.user_id
+group by A.user_id, book_id, A.user_name, review_desc, DATENAME(MONTH, published_date), [Nr.Review-uri]
+
+--cu pivot:
+
+select user_id, user_name, [February], [March], [April], [December]
+from 
+(	select A.user_id,
+	book_id,
+	A.user_name, 
+	DATENAME(MONTH, published_date) as [Month],
+	review_desc,
+	B.review_id
+from users as A inner join reviews as B on A.user_id = B.user_id inner join vNrReviews as C on B.user_id = C.user_id
+group by A.user_id, B.review_id, book_id, A.user_name, review_desc, DATENAME(MONTH, published_date), [Nr.Review-uri]
+) as SRC	
+pivot
+(	
+	count(review_id) for [Month] in ([January], [February], [March], [April], [May], [June], [July], [August], [September], [October], [November], [December])
+) as PVT
+
+--alt exemplu care nu se leaga cu tabelele deja existente
+
+create table sales
+(	customer_id int not null,
+	sales_date varchar(20) not null,
+	sales_amount int
+)
+
+insert into sales
+values
+	(1, '2018-01-09', 245),
+	(1, '2018-02-05', 239),
+	(1, '2018-03-12', 500),
+	(1, '2018-04-09', 631),
+
+	(2, '2018-01-09', 122),
+	(2, '2018-02-09', 23),
+	(2, '2018-03-09', 324),
+
+	(3, '2018-01-09', 155),
+	(3, '2018-02-09', 257),
+	(3, '2018-03-09', 385),
+	(3, '2018-04-09', 980),
+
+	(4, '2018-01-09', 312),
+	(4, '2018-02-09', 345),
+
+	(5, '2018-01-09', 753),
+	(5, '2018-02-09', 859)
+
+select * from sales
+
+--sa se selecteze vanzarile per customer pe fiecare luna
+
+--fara pivot
+
+select customer_id, datename(month, sales_date) as [Month], sum(sales_amount) as Total
+from sales
+group by customer_id, datename(month, sales_date)
+
+--cu pivot
+
+select customer_id, [January], [February], [March], [April]
+from
+(
+	select customer_id, datename(month, sales_date) as [Month], sales_amount
+	from sales
+) as SRC
+pivot
+( 
+	sum(sales_amount)
+	for [Month] in ([January], [February], [March], [April])
+) as PVT
