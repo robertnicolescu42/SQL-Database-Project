@@ -454,3 +454,122 @@ pivot
 	sum(sales_amount)
 	for [Month] in ([January], [February], [March], [April])
 ) as PVT
+							 
+							 --TSQL Procedural
+
+
+--sa se afiseze numarul de carti in stoc, si numarul de autori
+--din stoc
+
+declare @nrCarti int, @nrAutori int
+select @nrCarti = count( book_id),
+	   @nrAutori = count(distinct book_author)
+	   from books
+print 'nr carti = ' + str(@nrCarti) + ' nrAutori = ' + str(@nrAutori)
+
+--sa se afiseze autorul cu cele mai multe carti in stoc
+declare @autor varchar(20)
+set @autor = (  select top 1 book_author from books
+				order by book_author, book_stock DESC
+			 )
+print 'autorul cu cele mai multe carti in stoc este: ' + @autor
+
+--nr de review-uri la o carte precizata prin parametru
+
+go
+create function nrRev(@book_id int)
+returns int
+as
+begin
+	declare @nrR int
+	set @nrR = (select count(review_id) from reviews
+	where book_id = @book_id)
+	return @nrR
+	end
+
+print dbo.nrRev(1)
+
+--sa se creeze o functie care intoarce numarul de review-uri date de un user
+
+go
+create function nrReviewUser(@user_id int)
+returns int
+as
+begin
+	declare @nrR int
+	set @nrR = (select count (*) from reviews
+						where @user_id = user_id)
+	return @nrR
+	end
+
+print dbo.nrReviewUser(1)
+
+--sa se creeze o procedura care returneaza toate datele despre o carte data ca parametru de intrare
+
+go
+create procedure ps_bookdata(@book_id int) as
+	begin
+	select *
+	from books
+	where @book_id = book_id
+	end
+
+execute ps_bookdata 1
+
+
+--sa se creeze o procedura care creste stocul unei carti
+
+go
+create procedure ps_addStock(@book_id int, @nr int) as
+	begin
+	update books set book_stock = book_stock + @nr
+	where book_id = @book_id
+	end
+
+execute ps_addStock 9,10
+
+
+--sa se indexeze coloana isbn
+
+create index Ix_isbn on librarie.books(book_isbn)
+
+select * from books where book_isbn = '9788476682050'
+
+--
+
+create trigger tg_rating on librarie.bookRatings
+after update, insert	
+as
+begin
+	if (rating_number < 0 or rating_number > 100) RAISERROR('Nu poti da un rating < 0 sau > 100!')
+	end
+
+
+create trigger tg_Ratings on librarie.bookRatings
+for insert,update
+as
+	BEGIN
+	declare @rating int
+	if exists(select * from inserted)
+	begin
+	select @rating=rating_number from inserted
+	if @rating > 100 or @rating < 0
+	begin
+	raiserror ('EROARE RATING',16,1)
+	rollback tran
+end
+end
+END
+
+drop trigger tg_Rating
+
+select * from bookRatings
+
+update bookRatings 
+set book_id = 8, review_id = 5, rating_number = 1000
+where book_id = 8
+
+--Msg 50000, Level 16, State 1, Procedure tg_Rating, Line 11 [Batch Start Line 569]
+--EROARE RATING
+--Msg 3609, Level 16, State 1, Line 571
+--The transaction ended in the trigger. The batch has been aborted.
